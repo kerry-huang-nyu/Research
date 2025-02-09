@@ -10,6 +10,7 @@ coins = coins.sort()
 def flip_biased(bias: float) -> bool:
     return np.random.rand() < bias # < vs <= is arbitrary here
 
+# Adaptive
 first = np.random.randint(0, n)
 flips = 1
 if flip_biased(coins[first]):
@@ -25,6 +26,28 @@ else:
         flips += 1
         if flip_biased(coin): break # If we get heads, we're done
 
+print("adaptive:")
 print("n:", n)
 print("coins:", coins)
-print("FLIPS:", flips)
+print("flips:", flips)
+print("==========================")
+
+# Round-Robin
+flips = 1
+first_res = flip_biased(coins[0]) # Start with coin 0; could be n, arbitrary choice
+backwards = True # Flag for round-robin ordering
+i, j = 1, n - 1 # Skip 0 since that was our first flip
+while i <= j:
+    flips += 1
+    if backwards: # Highest to lowest prob of heads
+        current_res = flip_biased(coins[j])
+        j -= 1
+    else: # Highest to lowest prob of tails
+        current_res = flip_biased(coins[i])
+        i += 1
+    if first_res != current_res: break # Got the side we wanted
+    backwards = not backwards # Flip the ordering 
+
+print("non-adaptive:")
+print("flips:", flips)
+print("==========================")
