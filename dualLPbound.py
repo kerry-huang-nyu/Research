@@ -6,6 +6,7 @@ def getQ(n, d):
 
 def u(S, a, d, Q):
     n = len(a)
+    return 1
 
 def uS(S, a, i, d, Q):
     Si = S.copy(); Si[i] = True
@@ -13,7 +14,7 @@ def uS(S, a, i, d, Q):
 
 def expression(S, a, d, Q):
     numerator = sum(
-        [ uS(S, a, i, d) for i, selected in enumerate(S) if not selected ]
+        [ uS(S, a, i, d, Q) for i, selected in enumerate(S) if not selected ]
     )
     return numerator / (Q - u(S, a, d, Q))
 
@@ -47,4 +48,4 @@ def bound(n, d):
         print(a)
 
 bound(3, 4)
-all_subsets([1, 2, 3])
+all_subsets([1, 2, 3], 3, 9)
