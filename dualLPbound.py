@@ -9,9 +9,8 @@ class RepProb:
     )
 
     def __init__(self, d, n):
-        assert d <= n # problem should be feasible
-        self.d = d
-        self.n = n
+        assert d <= n # problem must be feasible
+        self.d, self.n = d, n
         self.initQs()
         self.a = np.ones(self.n, dtype=int)
         self.current_u = 0
@@ -28,16 +27,20 @@ class RepProb:
             thisQ = (i + 1) + (self.n - self.d + 1 + (i + 1))
             self.subQs[i] = thisQ; self.Q *= thisQ
 
+    # returns u(S, a) for current S and a
     def u(self):
         num_tests = len(list(filter(bool, self.S)))
-        unique = len({ e for e in it.compress(self.a, self.S) })
-        subtractor = self.d - unique # 1-certificate
+        num_reps = len({ e for e in it.compress(self.a, self.S) })
+        # subtractor will end as the product of all the OR terms
+        subtractor = self.d - num_reps # 1-certificate
         for i in range(2, self.d - 1):
-            unique_val = min(unique, i) # capped at goal value
-            tests_val = min(self.n - self.d + 1 + i, num_tests) # capped at goal value
+            # both below are capped at goal value
+            unique_val = min(num_reps, i)
+            tests_val = min(self.n - self.d + 1 + i, num_tests)
             subtractor *= self.subQs[i - 1] - (unique_val + tests_val)
         return self.Q - subtractor
 
+    # returns the marginal value of x_(i + 1)
     def uS(self, i):
         assert not self.S[i]
 
@@ -48,17 +51,24 @@ class RepProb:
         assert uSi - self.current_u >= 0
         return uSi - self.current_u
 
+    # calculates the fraction in the dual LP bound
     def expression(self):
         numerator = sum(
-            [ self.uS(i) for i in range(len(self.S)) if not self.S[i] ]
+            [ self.uS(i) for i in range(self.n) if not self.S[i] ]
         )
-        assert self.Q - self.current_u >= 0
+
+        # this method shouldn't be called if u(S, a) = Q
+        assert self.Q - self.current_u > 0
         return numerator / (self.Q - self.current_u)
 
+    # finds the maximum over all subsets of a given assignment a
     def all_subsets(self):
         self.S = np.zeros(self.n, dtype=bool)
         while True:
+            # update and cache current u(S, a)
             self.current_u = self.u()
+
+            # only consider if Q - u(S, a) != 0
             if self.current_u != self.Q:
                 new_value = self.expression()
                 if new_value > self.max_so_far:
@@ -67,6 +77,7 @@ class RepProb:
                     self.maxS = self.S.copy()
                     self.maxa = self.a.copy()
 
+            # increment to next subset
             i = 0
             while i < self.n and self.S[i]:
                 self.S[i] = False; i += 1
@@ -74,10 +85,12 @@ class RepProb:
                 return
             self.S[i] = True
 
+    # finds the dual LP bound for the specified d and n
     def bound(self):
         while True:
             self.all_subsets()
             
+            # increment to next assignment
             i = 1
             while i < self.n + 1 and self.d == self.a[-i]:
                 self.a[-i] = 1; i += 1
@@ -87,7 +100,7 @@ class RepProb:
 
 if __name__ == '__main__':
     # seems to be bounded at n - d + 1 ?
-    n_domain = range(7, 11)
+    n_domain = range(7, 10)
     d_domain = range(3, 7)
     print('d\tn', end='')
     for i in n_domain:
