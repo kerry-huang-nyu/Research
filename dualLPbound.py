@@ -87,8 +87,15 @@ class RepProb:
 
 if __name__ == '__main__':
     # seems to be bounded at n - d + 1 ?
-    for d, n in it.product(range(3, 6), range(7, 10)):
-        print(f'd={d}, n={n}')
-        bound, S, a = RepProb(d, n).bound()
-        print(bound, S, a, sep='\n')
-        print('---------------------')
+    n_domain = range(7, 11)
+    d_domain = range(3, 7)
+    print('d\tn', end='')
+    for i in n_domain:
+        print(f'\t{i}', end='')
+    print()
+    for d in d_domain:
+        print(f'{d}\t', end='')
+        for n in n_domain:
+            bound, S, a = RepProb(d, n).bound()
+            print(f'\t{bound}', end='')
+        print()
