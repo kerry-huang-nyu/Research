@@ -18,11 +18,13 @@ class RepProb:
         self.max_so_far = float('-inf')
 
     def initQs(self):
-        self.subQs = np.empty(self.d - 2) # (d - 2) - 2 + 1 + 1
+        # [0] is the 1-certificate
+        # [1, d - 1] are the 0-certificates with goal values [2, d - 2]
+        self.subQs = np.empty(self.d - 2)
         self.Q = self.subQs[0] = self.d # 1-certificate
         # TODO: this could probably be done better
         for i in range(1, self.d - 2): # [2, d - 2]
-            # seen (i + 1) unique reps AND performed n - d + 1 + (i + 1) tests
+            # seen (i + 1) unique reps AND performed (n - d + 1) + (i + 1) tests
             thisQ = (i + 1) + (self.n - self.d + 1 + (i + 1))
             self.subQs[i] = thisQ; self.Q *= thisQ
 
