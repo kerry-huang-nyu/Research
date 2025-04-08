@@ -100,8 +100,8 @@ class RepProb:
 
 if __name__ == '__main__':
     # seems to be bounded at n - d + 1 ?
-    n_domain = range(7, 10)
-    d_domain = range(3, 7)
+    n_domain = range(7, 11)
+    d_domain = range(3, 8)
     print('d\tn', end='')
     for i in n_domain:
         print(f'\t{i}', end='')
