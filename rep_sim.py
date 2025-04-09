@@ -15,9 +15,11 @@ class RepProb:
         self.distribution = np.random.rand(self.d, self.n)
         self.distribution.sort(axis=0)
 
-        opt, Eopt = self.opt_search()
         rr_ordering = self.rr()
         ERR = self.expected(rr_ordering)
+        print('RR: ', [ int(i) for i in rr_ordering ])
+        print('E[RR]: ', ERR)
+        opt, Eopt = self.opt_search()
 
         factor = ERR / Eopt
         if factor > self.d:
@@ -80,6 +82,8 @@ class RepProb:
         # Brute force through all orderings
         for i, order in enumerate(it.permutations(range(self.n))): #wait is this supposed to be a length of 5? 
             if i % 1000 == 0:
+                print(f'Current min E[S]: {current_min}')
+                print(f'Achieved by ordering {current_best}')
                 print(f"[status] Checked {i}/{total_perms} permutations ({(i / total_perms * 100):.2f}%)", end='\r')
             current_exp = self.expected(order)
             if current_exp < current_min:
