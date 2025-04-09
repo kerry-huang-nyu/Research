@@ -40,9 +40,15 @@ class RepProb:
             if len(seen) == self.d or len(path) >= self.n: #prevent overflow
                 outcomes.add(tuple(path))
                 return
+            
+            need = self.d - len(seen)
+            rolls_left = self.n - len(path)
 
-            for val in range(self.d):
-                backtrack(path + [val], seen | {val}) #unions seen and {val} through a new set 
+            if need <= rolls_left: #I will only keep checking if it is still possible 
+                for val in range(self.d): 
+                    backtrack(path + [val], seen | {val}) #unions seen and {val} through a new set 
+            else: #terminate the sequence 
+                outcomes.add(tuple(path))
 
         backtrack([], set())
         return outcomes
@@ -126,7 +132,7 @@ class RepProb:
 
 if __name__ == '__main__':
     d = 3
-    n = 10
+    n = 5
     rep_prob = RepProb(d, n)
     for _ in tqdm(range(100), desc="Running simulations"):
         rep_prob.check_opt_vs_rr()
