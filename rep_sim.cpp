@@ -4,6 +4,15 @@
 #include <random>
 #include <cmath>
 
+std::size_t factorial(std::size_t n) {
+    std::size_t res = 1;
+    for (std::size_t i = 2; i <= n; i++) {
+        res *= i;
+    }
+
+    return res;
+}
+
 // #define DEBUG
 
 class RepProb {
@@ -31,7 +40,9 @@ class RepProb {
         return os;
     }
 public:
-    RepProb(unsigned d, unsigned n) : d(d), n(n) {
+    RepProb(unsigned d, unsigned n) : d(d), n(n),
+    distribution(nullptr), RR(nullptr), ERR(0), OPT(new unsigned[n]),
+    EOPT(n), realizations(nullptr), numRealizations(0) {
         // distribution[i][j] <-> ith die, jth rep
         distribution = new double*[n];
         for (std::size_t i = 0; i < n; i++) {
@@ -95,6 +106,14 @@ public:
             delete[] distribution[i];
         }
         delete[] distribution;
+        delete[] OPT;
+        if (realizations) {
+            delete[] realizations;
+        }
+    }
+
+    void RRvsOPT() {
+        exhaustiveSearch();
     }
 
 private:
@@ -193,21 +212,43 @@ private:
         // This makes it easier to increment to the next permutation
         unsigned* ordering = new unsigned[n];
         for (std::size_t i = 0; i < n; i++) {
-            ordering[i] = n - i - 1;
+            ordering[i] = i;
         }
 
-        unsigned* minOrdering = nullptr;
-        double minE = n;
-        std::size_t swapFrom = 0, swapTo = 0;
-        while (true) {
+        std::size_t numChecked = 0;
+        std::size_t totalPermuations = factorial(n);
 
-            // Increment to next ordering
-            if (ordering[swapTo] == n - 1) {
-                swapTo++;
+        do {
+            double thisCost = expected(ordering);
+            if (thisCost < EOPT) {
+                // Copy into OPT
+                for (std::size_t i = 0; i < n; i++) {
+                    OPT[i] = ordering[i];
+                }
+
+                // Note cost
+                EOPT = thisCost;
             }
-            std::swap(ordering[swapFrom], ordering[swapTo]);
-            swapTo++;
+
+            numChecked++;
+            if (0 == numChecked % 1000) {
+                std::cout << "Checked " << numChecked 
+                << " permutations out of " << totalPermuations << " total. "
+                << std::round(1000.0f * double(numChecked) / double(totalPermuations)) / 10.0f
+                << "% done.\r" << std::flush;
+            }
+        } while (std::next_permutation(ordering, ordering + n));
+
+        // Cleanup
+        delete[] ordering;
+
+        // Display what we've found
+        std::cout << "OPT:\n";
+        for (std::size_t i = 0; i < n; i++) {
+            std::cout << OPT[i] << ' ';
         }
+        std::cout << "\nE[OPT]:\n";
+        std::cout << EOPT << '\n';
     }
 
     // Initializes RR
@@ -278,15 +319,18 @@ private:
     double** distribution;
     unsigned* RR;
     double ERR;
+    unsigned* OPT;
+    double EOPT;
     Realization* realizations;
     std::size_t numRealizations;
 };
 
 
 int main() {
-    RepProb repProb(3, 7);
+    RepProb repProb(3, 10);
 
     std::cout << repProb << std::endl;
+    repProb.RRvsOPT();
 
     return 0;
 }
