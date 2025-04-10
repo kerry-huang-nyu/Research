@@ -4,6 +4,10 @@
 #include <random>
 #include <cmath>
 
+// How many permutations to check before updating the display
+#define LOCAL_DISPLAY 100
+#define OPT_DISPLAY 1000
+
 std::size_t factorial(std::size_t n) {
     std::size_t res = 1;
     for (std::size_t i = 2; i <= n; i++) {
@@ -30,19 +34,33 @@ class RepProb {
             os << '\n';
         }
 
-        os << "RR Ordering:\n";
+        os << "RR:\n";
         for (std::size_t i = 0; i < repProb.n; i++) {
             os << repProb.RR[i] << ' ';
         }
-        os << "\nE[RR]:\n";
-        os << repProb.ERR;
+        os << "\nE[RR]: " << repProb.ERR << '\n';
+
+        if (repProb.optVerified) {
+            os << "OPT:\n";
+            for (std::size_t i = 0; i < repProb.n; i++) {
+                os << repProb.OPT << ' ';
+            }
+            os << "\nE[OPT]: " << repProb.EOPT;
+        } else {
+            os << "Best local optimum found:\n";
+            for (std::size_t i = 0; i < repProb.n; i++) {
+                os << repProb.localOPT[i] << ' ';
+            }
+            os << "With expectation: " << repProb.ElocalOPT;
+        }
 
         return os;
     }
 public:
     RepProb(unsigned d, unsigned n) : d(d), n(n),
     distribution(nullptr), RR(nullptr), ERR(0), OPT(new unsigned[n]),
-    EOPT(n), realizations(nullptr), numRealizations(0) {
+    EOPT(n), optVerified(false), localOPT(new unsigned[n]), ElocalOPT(n),
+    realizations(nullptr), numRealizations(0) {
         // distribution[i][j] <-> ith die, jth rep
         distribution = new double*[n];
         for (std::size_t i = 0; i < n; i++) {
@@ -107,6 +125,7 @@ public:
         }
         delete[] distribution;
         delete[] OPT;
+        delete[] localOPT;
         if (realizations) {
             delete[] realizations;
         }
@@ -114,6 +133,35 @@ public:
 
     void RRvsOPT() {
         exhaustiveSearch();
+    }
+
+    void RRvsLocalOPT() {
+        // Not sure why C++ makes RNG so weird
+        std::random_device rd;
+        std::mt19937 gen(rd());
+
+        std::size_t numTries = 1; // How many random starting points to try
+        unsigned* start = new unsigned[n];
+        for (std::size_t i = 0; i < n; i++) {
+            start[i] = i;
+        }
+
+        for (std::size_t i = 0; i < numTries; i++) {
+            std::shuffle(start, start + n, gen); // Random starting point
+
+            double thisCost = localSearch(start); // Modifies start in-place
+
+            // If we found a better local minimum, replace localOPT
+            if (thisCost < ElocalOPT) {
+                ElocalOPT = thisCost;
+                for (std::size_t i = 0; i < n; i++) {
+                    localOPT[i] = start[i];
+                }
+            }
+        }
+
+        // Cleanup
+        delete[] start;
     }
 
 private:
@@ -208,8 +256,7 @@ private:
     }
 
     void exhaustiveSearch() {
-        // Initially, roll the dice in reverse order
-        // This makes it easier to increment to the next permutation
+        // Must start sorted for std::next_permutation to be exhaustive
         unsigned* ordering = new unsigned[n];
         for (std::size_t i = 0; i < n; i++) {
             ordering[i] = i;
@@ -231,13 +278,14 @@ private:
             }
 
             numChecked++;
-            if (0 == numChecked % 1000) {
+            if (0 == numChecked % OPT_DISPLAY) {
                 std::cout << "Checked " << numChecked 
                 << " permutations out of " << totalPermuations << " total. "
                 << std::round(1000.0f * double(numChecked) / double(totalPermuations)) / 10.0f
                 << "% done.\r" << std::flush;
             }
         } while (std::next_permutation(ordering, ordering + n));
+        optVerified = true;
 
         // Cleanup
         delete[] ordering;
@@ -249,6 +297,47 @@ private:
         }
         std::cout << "\nE[OPT]:\n";
         std::cout << EOPT << '\n';
+    }
+
+    // Searches in the neighborhood of start for a local minimum
+    double localSearch(unsigned* start) {
+        // Track the best expectation we've found so far
+        double expToBeat = expected(start);
+
+        // If we don't find any better neighbours, the loop will terminate
+        bool foundBetter = false;
+        std::size_t numChecked = 0;
+        do {
+            for (std::size_t i = 0; i < n; i++) {
+                for (std::size_t j = 0; j < n; j++) {
+                    if (j == i) { continue; }
+                    
+                    // Try swapping i with j
+                    unsigned aux = start[i];
+                    start[i] = start[j];
+                    start[j] = aux;
+
+                    // Check if this is better
+                    double thisExp = expected(start);
+                    if (thisExp < expToBeat) {
+                        expToBeat = thisExp;
+                        foundBetter = true;
+                    // If it's not better, swap back
+                    } else {
+                        start[j] = start[i];
+                        start[i] = aux;
+                    }
+                }
+            }
+
+            numChecked++;
+            if (0 == numChecked % LOCAL_DISPLAY) {
+                std::cout << "Checked " << numChecked << " permutations.\r";
+            }
+        } while (foundBetter);
+
+        // Let the caller know how well we did
+        return expToBeat;
     }
 
     // Initializes RR
@@ -317,10 +406,17 @@ private:
 
     unsigned d, n;
     double** distribution;
+
     unsigned* RR;
     double ERR;
+
     unsigned* OPT;
     double EOPT;
+    bool optVerified;
+
+    unsigned* localOPT;
+    double ElocalOPT;
+
     Realization* realizations;
     std::size_t numRealizations;
 };
@@ -329,8 +425,9 @@ private:
 int main() {
     RepProb repProb(3, 10);
 
+    repProb.RRvsLocalOPT();
     std::cout << repProb << std::endl;
-    repProb.RRvsOPT();
+    // repProb.RRvsOPT();
 
     return 0;
 }
