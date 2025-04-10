@@ -62,11 +62,6 @@ public:
             }
         }
 
-        // Re-sort
-        for (std::size_t i = 0; i < n; i++) {
-            std::sort(distribution[i], distribution[i] + d);
-        }
-
         // Initialize RR ordering
         genRR();
     }
