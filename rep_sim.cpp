@@ -308,25 +308,21 @@ private:
         bool foundBetter = false;
         std::size_t numChecked = 0;
         do {
-            for (std::size_t i = 0; i < n; i++) {
-                for (std::size_t j = 0; j < n; j++) {
-                    if (j == i) { continue; }
-                    
-                    // Try swapping i with j
-                    unsigned aux = start[i];
-                    start[i] = start[j];
-                    start[j] = aux;
+            for (std::size_t i = 0; i < n - 1; i++) {
+                // Try swapping i with i + 1
+                unsigned aux = start[i];
+                start[i] = start[i + 1];
+                start[i + 1] = aux;
 
-                    // Check if this is better
-                    double thisExp = expected(start);
-                    if (thisExp < expToBeat) {
-                        expToBeat = thisExp;
-                        foundBetter = true;
-                    // If it's not better, swap back
-                    } else {
-                        start[j] = start[i];
-                        start[i] = aux;
-                    }
+                // Check if this is better
+                double thisExp = expected(start);
+                if (thisExp < expToBeat) {
+                    expToBeat = thisExp;
+                    foundBetter = true;
+                // If it's not better, swap back
+                } else {
+                    start[i + 1] = start[i];
+                    start[i] = aux;
                 }
             }
 
