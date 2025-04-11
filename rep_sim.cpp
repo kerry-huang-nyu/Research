@@ -164,6 +164,14 @@ public:
         delete[] start;
     }
 
+    double getERR() const {
+        return ERR;
+    }
+
+    double getElocalOPT() const {
+        return ElocalOPT;
+    }
+
 private:
     unsigned cost(const unsigned* ordering, const unsigned* realization) const {
         bool* colorsSeen = new bool[d];
@@ -305,32 +313,48 @@ private:
         double expToBeat = expected(start);
 
         // If we don't find any better neighbours, the loop will terminate
-        bool foundBetter = false;
         std::size_t numChecked = 0;
-        do {
-            for (std::size_t i = 0; i < n - 1; i++) {
-                // Try swapping i with i + 1
-                unsigned aux = start[i];
-                start[i] = start[i + 1];
-                start[i + 1] = aux;
 
-                // Check if this is better
-                double thisExp = expected(start);
-                if (thisExp < expToBeat) {
-                    expToBeat = thisExp;
-                    foundBetter = true;
-                // If it's not better, swap back
-                } else {
-                    start[i + 1] = start[i];
+        // Swapping start[bestSwapFrom] and start[bestSwapTo]
+        // will be the best neighbour of start
+        std::size_t bestSwapFrom = n, bestSwapTo = n;
+        do {
+            bestSwapFrom = bestSwapTo = n; // Reset
+            for (std::size_t i = 0; i < n; i++) {
+                for (std::size_t j = 0; j < n; j++ ) {
+                    if (j == i) { continue; }
+
+                    // Try swapping i with j
+                    unsigned aux = start[i];
+                    start[i] = start[j];
+                    start[j] = aux;
+
+                    // Check if this is better
+                    double thisExp = expected(start);
+                    if (thisExp < expToBeat) {
+                        expToBeat = thisExp;
+                        bestSwapFrom = i;
+                        bestSwapTo = j;
+                    }
+
+                    // Undo the change
+                    start[j] = start[i];
                     start[i] = aux;
                 }
             }
 
+            // Make the change we found to be best
+            if (bestSwapFrom != n) {
+                unsigned aux = start[bestSwapFrom];
+                start[bestSwapFrom] = start[bestSwapTo];
+                start[bestSwapTo] = aux;
+            }
+
             numChecked++;
             if (0 == numChecked % LOCAL_DISPLAY) {
-                std::cout << "Checked " << numChecked << " permutations.\r";
+                std::cout << "Checked " << numChecked << " permutations. Best: " << expToBeat << '\r';
             }
-        } while (foundBetter);
+        } while (bestSwapFrom != n);
 
         // Let the caller know how well we did
         return expToBeat;
@@ -419,11 +443,15 @@ private:
 
 
 int main() {
-    RepProb repProb(3, 10);
-
-    repProb.RRvsLocalOPT();
-    std::cout << repProb << std::endl;
-    // repProb.RRvsOPT();
+    unsigned d = 3;
+    for (unsigned n = 10; n <= 100; n++) {
+        RepProb repProb(d, n);
+        repProb.RRvsLocalOPT();
+        std::cout << repProb << '\n';
+        std::cout << "Approximation Factor: " << repProb.getERR() / repProb.getElocalOPT() << '\n';
+        std::cout << "d = " << d << " ; n = " << n << '\n';
+        std::cout << "==========================" << std::endl;
+    }
 
     return 0;
 }
