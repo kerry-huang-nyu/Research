@@ -108,8 +108,9 @@ public:
         }
 
         // Initialize realizations
-        numRealizations = pow(d, n);
-        realizations = genRealizations();
+        // numRealizations = pow(d, n);
+        // realizations = genRealizations();
+
         #ifdef DEBUG
         std::cout << numRealizations << std::endl;
         for (std::size_t i = 0; i < numRealizations; i++) {
@@ -124,7 +125,7 @@ public:
 
         // Initialize RR ordering
         RR = genRR();
-        ERR = expected(RR);
+        ERR = expected_markov(RR);
     }
 
     ~RepProb() {
