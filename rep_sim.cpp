@@ -8,6 +8,15 @@
 #define LOCAL_DISPLAY 100
 #define OPT_DISPLAY 1000
 
+int popcount(unsigned x) { //couldn't be bothered to import? 
+    int count = 0;
+    while (x) {
+        x &= (x - 1);  // clear the lowest set bit
+        ++count;
+    }
+    return count;
+}
+
 std::size_t factorial(std::size_t n) {
     std::size_t res = 1;
     for (std::size_t i = 2; i <= n; i++) {
@@ -172,6 +181,17 @@ public:
         return ElocalOPT;
     }
 
+    void testExpected() const {
+        unsigned* ordering = new unsigned[n];
+        for (unsigned i = 0; i < n; ++i) {
+            ordering[i] = i;
+        }
+        std::cout << "expected(): " << expected(ordering) << std::endl; 
+        std::cout << "expected() markov: " << expected_markov(ordering) << std::endl;
+
+        delete[] ordering;
+    }
+
 private:
     unsigned cost(const unsigned* ordering, const unsigned* realization) const {
         bool* colorsSeen = new bool[d];
@@ -216,6 +236,69 @@ private:
             E += real->P * cost(ordering, real->outcome);
         }
 
+        return E;
+    }
+
+    double expected_markov(const unsigned* ordering) const {
+        double E = 0;
+        std::size_t states = 1 << d;  // 2^d using bitshift
+
+        double* markov = new double[states]();
+        bool* alive = new bool[states]();
+        // Initialize
+        for (std::size_t i = 0; i < states; ++i) {
+            alive[i] = true;
+            markov[i] = 0.0; 
+        }
+        alive[states - 1] = false;  // last state 1 * [d] is initially dead
+        markov[0] = 1.0;  // start with full weight at state 0
+        unsigned cost = 0;
+    
+        for (std::size_t i = 0; i < n; ++i) {
+            cost ++; 
+            unsigned dice = ordering[i];
+    
+            for (int j = states -1; j >= 0; --j) {  // reverse iteration: j from states-1 to 0
+
+                if (!alive[j]) continue; //if not alive we have 0 anyway 
+    
+                double newself = 0.0;
+    
+                for (std::size_t k = 0; k < d; ++k) {
+                    unsigned destination = j | (1u << k);  // set bit k
+                    double chance = markov[j] * distribution[dice][k];
+    
+                    if (destination != j) {
+                        if (alive[destination]) {
+                            markov[destination] += chance;
+                        } else {
+                            E += chance * cost;
+                        }
+                    } else {
+                        newself += chance;
+                    }
+                }
+                markov[j] = newself;
+            }
+    
+            // Begin killing nodes
+            std::size_t left = n - i - 1; //iteration left to travel 
+
+            if (left < d - 1) {
+                for (int j = states -1; j >= 0; j--) {
+                    //on the last iteration or the state is has not enough 1 
+                    if (i == n - 1 || popcount(j) < left) {
+                        E += markov[j] * cost;
+                        alive[j] = false;
+                        markov[j] = 0;
+                    }
+                }
+            }
+        }
+    
+        delete[] markov;
+        delete[] alive;
+    
         return E;
     }
 
@@ -274,7 +357,7 @@ private:
         std::size_t totalPermuations = factorial(n);
 
         do {
-            double thisCost = expected(ordering);
+            double thisCost = expected_markov(ordering);
             if (thisCost < EOPT) {
                 // Copy into OPT
                 for (std::size_t i = 0; i < n; i++) {
@@ -310,7 +393,7 @@ private:
     // Searches in the neighborhood of start for a local minimum
     double localSearch(unsigned* start) {
         // Track the best expectation we've found so far
-        double expToBeat = expected(start);
+        double expToBeat = expected_markov(start);
 
         // If we don't find any better neighbours, the loop will terminate
         std::size_t numChecked = 0;
@@ -330,7 +413,7 @@ private:
                     start[j] = aux;
 
                     // Check if this is better
-                    double thisExp = expected(start);
+                    double thisExp = expected_markov(start);
                     if (thisExp < expToBeat) {
                         expToBeat = thisExp;
                         bestSwapFrom = i;
@@ -446,6 +529,8 @@ int main() {
     unsigned d = 3;
     for (unsigned n = 10; n <= 100; n++) {
         RepProb repProb(d, n);
+        //repProb.testexpected();
+
         repProb.RRvsLocalOPT();
         std::cout << repProb << '\n';
         std::cout << "Approximation Factor: " << repProb.getERR() / repProb.getElocalOPT() << '\n';
