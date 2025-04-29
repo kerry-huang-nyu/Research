@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <random>
 #include <cmath>
+#include <functional>
 
 // How many permutations to check before updating the display
 #define LOCAL_DISPLAY 100
@@ -26,6 +27,32 @@ std::size_t factorial(std::size_t n) {
     return res;
 }
 
+std::ostream& displayDistribution(std::ostream& os, const double* const* distribution, unsigned n, unsigned d) {
+    os << "Distribution: (row : die, column : color)\n";
+    for (std::size_t i = 0; i < n; i++) {
+        for (std::size_t j = 0; j < d; j++) {
+            os << std::round(1000.0f * distribution[i][j]) / 1000.0f << '\t';
+        }
+        os << '\n';
+    }
+
+    return os;
+}
+
+std::ostream& displayFavorabilities(std::ostream& os, const double* const* distribution, unsigned n, unsigned d) {
+    os << "Favorabilities:\n";
+    for (std::size_t color = 0; color < d; color++) {
+        double favor = 0;
+        for (std::size_t die = 0; die < n; die++) {
+            favor += distribution[die][color];
+        }
+
+        os << color << ": " << std::round(1000.0f * favor) / 1000.0f << '\n';
+    }
+
+    return os;
+}
+
 // #define DEBUG
 
 class RepProb {
@@ -35,13 +62,8 @@ class RepProb {
     };
 
     friend std::ostream& operator<<(std::ostream& os, const RepProb& repProb) {
-        os << "Distribution: (row : die, column : color)\n";
-        for (std::size_t i = 0; i < repProb.n; i++) {
-            for (std::size_t j = 0; j < repProb.d; j++) {
-                os << std::round(1000.0f * repProb.distribution[i][j]) / 1000.0f << '\t';
-            }
-            os << '\n';
-        }
+        displayDistribution(os, repProb.distribution, repProb.n, repProb.d);
+        displayFavorabilities(os, repProb.distribution, repProb.n, repProb.d);
 
         os << "RR:\n";
         for (std::size_t i = 0; i < repProb.n; i++) {
@@ -56,11 +78,11 @@ class RepProb {
             }
             os << "\nE[OPT]: " << repProb.EOPT;
         } else {
-            os << "Best local optimum found:\n";
-            for (std::size_t i = 0; i < repProb.n; i++) {
-                os << repProb.localOPT[i] << ' ';
-            }
-            os << "With expectation: " << repProb.ElocalOPT;
+            // os << "Best local optimum found:\n";
+            // for (std::size_t i = 0; i < repProb.n; i++) {
+            //     os << repProb.localOPT[i] << ' ';
+            // }
+            // os << "With expectation: " << repProb.ElocalOPT;
         }
 
         return os;
@@ -139,6 +161,47 @@ public:
         if (realizations) {
             delete[] realizations;
         }
+    }
+
+    void initDistribution() {
+        numRealizations = pow(d, n);
+        realizations = genRealizations();
+    }
+
+    // Returns P( |pred = true), as well as P(pred = true)
+    std::tuple<double**, double> conditionalDistribution(const std::function<bool(const unsigned*)>& pred) const {
+        double pPred = 0; // Probability of the predicate being true
+        double** condDist = new double*[n];
+        for (std::size_t i = 0; i < n; i++) {
+            condDist[i] = new double[d];
+            
+            // Initially zero
+            for (std::size_t j = 0; j < d; j++) {
+                condDist[i][j] = 0.0f;
+            }
+        }
+
+        // Calculate individual PMFs of the dice
+        for (std::size_t i = 0; i < numRealizations; i++) {
+            if (pred(realizations[i].outcome)) {
+                pPred += realizations[i].P;
+
+                for (std::size_t j = 0; j < n; j++) {
+                    // jth die
+                    unsigned whichRep = realizations[i].outcome[j];
+                    condDist[j][whichRep] += realizations[i].P;
+                }
+            }
+        }
+
+        // Final scaling
+        for (std::size_t i = 0; i < n; i++) {
+            for (std::size_t j = 0; j < d; j++) {
+                condDist[i][j] /= pPred;
+            }
+        }
+
+        return {condDist, pPred};
     }
 
     void RRvsOPT() {
@@ -528,15 +591,56 @@ private:
 
 int main() {
     unsigned d = 3;
-    for (unsigned n = 10; n <= 100; n++) {
+
+    for (unsigned n = 12; n <= 12; n++) {
         RepProb repProb(d, n);
+        
+        // Evaluates the representative problem
+        auto f = [d, n](const unsigned* outcome){
+            unsigned needCount = d;
+
+            bool* seen = new bool[d];
+            for (std::size_t i = 0; i < d; i++) {
+                seen[i] = false;
+            }
+
+            unsigned testsLeft = n;
+            for (std::size_t i = 0; i < n; i++) {
+                if (! seen[outcome[i]]) {
+                    needCount--;
+                    seen[outcome[i]] = true;
+                }
+
+                testsLeft--;
+                if (needCount > testsLeft) {
+                    delete[] seen;
+                    return false;
+                }
+            }
+
+            delete[] seen;
+            return 0 == needCount;
+        };
+
+        repProb.initDistribution();
+        auto [dist, prob] = repProb.conditionalDistribution(f);
+    
+        std::cout << repProb << std::endl;
+        
+        std::cout << "CONDITIONED ON f = 1:\n";
+        std::cout << "P(f = 1): " << std::round(prob * 1000.0f) / 1000.0f << '\n';
+        displayDistribution(std::cout, dist, n, d);
+        displayFavorabilities(std::cout, dist, n, d);
+        std::cout << std::endl;
+
+
         //repProb.testexpected();
 
-        repProb.RRvsLocalOPT();
-        std::cout << repProb << '\n';
-        std::cout << "Approximation Factor: " << repProb.getERR() / repProb.getElocalOPT() << '\n';
-        std::cout << "d = " << d << " ; n = " << n << '\n';
-        std::cout << "==========================" << std::endl;
+        // repProb.RRvsLocalOPT();
+        // std::cout << repProb << '\n';
+        // std::cout << "Approximation Factor: " << repProb.getERR() / repProb.getElocalOPT() << '\n';
+        // std::cout << "d = " << d << " ; n = " << n << '\n';
+        // std::cout << "==========================" << std::endl;
     }
 
     return 0;
