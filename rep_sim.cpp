@@ -163,13 +163,19 @@ public:
         }
     }
 
-    void initDistribution() {
+    void initRealizations() {
+        if (realizations) {
+            for (std::size_t i = 0; i < numRealizations; i++) {
+                delete[] realizations[i].outcome;
+            }
+            delete[] realizations;
+        }
         numRealizations = pow(d, n);
         realizations = genRealizations();
     }
 
     // Returns P( |pred = true), as well as P(pred = true)
-    std::tuple<double**, double> conditionalDistribution(const std::function<bool(const unsigned*)>& pred) const {
+    std::tuple<double**, double> conditionalDistribution(const std::function<bool(const unsigned*)>& pred) {
         double pPred = 0; // Probability of the predicate being true
         double** condDist = new double*[n];
         for (std::size_t i = 0; i < n; i++) {
@@ -200,6 +206,13 @@ public:
                 condDist[i][j] /= pPred;
             }
         }
+
+        // Replace distribution with conditional
+        for (std::size_t i = 0; i < n; i++) {
+            delete[] distribution[i];
+        }
+        delete[] distribution;
+        distribution = condDist;
 
         return {condDist, pPred};
     }
@@ -622,17 +635,18 @@ int main() {
             return 0 == needCount;
         };
 
-        repProb.initDistribution();
-        auto [dist, prob] = repProb.conditionalDistribution(f);
-    
+        repProb.initRealizations();
         std::cout << repProb << std::endl;
-        
-        std::cout << "CONDITIONED ON f = 1:\n";
-        std::cout << "P(f = 1): " << std::round(prob * 1000.0f) / 1000.0f << '\n';
-        displayDistribution(std::cout, dist, n, d);
-        displayFavorabilities(std::cout, dist, n, d);
-        std::cout << std::endl;
-
+        for (std::size_t i = 0; i < 100000; i++) {
+            auto [dist, prob] = repProb.conditionalDistribution(f);
+            repProb.initRealizations();
+            std::cout << "Iteration " << i << std::endl;
+            std::cout << std::round(1000.f * prob) / 1000.0f << std::endl;
+            if (i % 100 == 0) {
+                std::cout << repProb << std::endl;
+            }
+        }
+        std::cout << repProb << std::endl;
 
         //repProb.testexpected();
 
