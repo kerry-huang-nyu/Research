@@ -7,7 +7,7 @@
 
 // How many permutations to check before updating the display
 #define LOCAL_DISPLAY 100
-#define OPT_DISPLAY 1000
+const std::size_t OPT_DISPLAY = (1 << 19) - 1;
 
 int popcount(unsigned x) { //couldn't be bothered to import? 
     int count = 0;
@@ -74,7 +74,7 @@ class RepProb {
         if (repProb.optVerified) {
             os << "OPT:\n";
             for (std::size_t i = 0; i < repProb.n; i++) {
-                os << repProb.OPT << ' ';
+                os << repProb.OPT[i] << ' ';
             }
             os << "\nE[OPT]: " << repProb.EOPT;
         } else {
@@ -269,6 +269,135 @@ public:
         delete[] ordering;
     }
 
+    unsigned* genGreedyOrderingWithFirstTest() {
+        unsigned* bestOrdering = nullptr;
+        double bestOrderingCost = n + 1;
+        for (std::size_t i = 0; i < n; i++) {
+            unsigned* currentOrdering = genGreedyOrdering(i);
+            double currentOrderingCost = expected_markov(currentOrdering);
+            if (currentOrderingCost < bestOrderingCost) {
+                bestOrdering = currentOrdering;
+                bestOrderingCost = currentOrderingCost;
+            }
+            else {
+                delete[] currentOrdering;
+            }
+        }
+
+        return bestOrdering;
+    }
+
+    unsigned* genGreedyOrdering(unsigned startingTest) {
+        // probMissing[i] = Pr(missing color i)
+        double* probMissing = new double[d];
+        for (std::size_t i = 0; i < d; i++) {
+            probMissing[i] = 1 - distribution[startingTest][i];
+        }
+
+        // threads[i][j] = jth die in ordering optimized for ith rep
+        unsigned** threads = new unsigned*[d];
+        for (std::size_t i = 0; i < d; i++) {
+            threads[i] = new unsigned[n];
+
+            // Starting in the initial order
+            for (std::size_t j = 0; j < n; j++) {
+                threads[i][j] = j;
+            }
+
+            // Swap indices until it's the ordering the thread wants
+            std::sort(threads[i], threads[i] + n, [this, i](unsigned dieOne, unsigned dieTwo) {
+                // Sort based on each die's P( = i)
+                // Reversed
+                return distribution[dieOne][i] > distribution[dieTwo][i]; 
+            });
+        }
+
+        unsigned numTestsAdded = 1;
+
+        bool* testsAdded = new bool[n];
+        for (std::size_t i = 0; i < n; i++) {
+            testsAdded[i] = false;
+        }
+        testsAdded[startingTest] = true;
+        
+        unsigned* nextTests = new unsigned[d];
+        for (std::size_t i = 0; i < d; i++) {
+            nextTests[i] = 0;
+        }
+
+        unsigned* greedyOrdering = new unsigned[n];
+        greedyOrdering[0] = startingTest;
+
+        while (numTestsAdded < n) {
+            // Find the neediest color
+            unsigned needyColor = 0;
+            for (std::size_t i = 0; i < d; ++i) {
+                if (probMissing[i] > probMissing[needyColor]) {
+                    needyColor = i;
+                }
+            }
+
+            // Add its next test
+            while (testsAdded[threads[needyColor][nextTests[needyColor]]]) {
+                nextTests[needyColor]++;
+            }
+
+            unsigned currentTest = threads[needyColor][nextTests[needyColor]];
+            greedyOrdering[numTestsAdded] = currentTest;
+            testsAdded[currentTest] = true;
+            numTestsAdded++;
+            nextTests[needyColor]++;
+
+            // Update probabilities
+            for (std::size_t i = 0; i < d; ++i) {
+                probMissing[i] *= 1 - distribution[currentTest][i];
+            }
+        }
+
+        for (std::size_t i = 0; i < d; ++i) {
+            delete[] threads[i];
+        }
+        delete[] threads;
+        delete[] nextTests;
+        delete[] testsAdded;
+        delete[] probMissing;
+
+        return greedyOrdering;
+    }
+
+    void compareGreedyAndOpt() {
+        unsigned* greedyOrdering = genGreedyOrderingWithFirstTest();
+        unsigned* rrOrdering = genRR();
+        exhaustiveSearch();
+
+        double greedyCost = expected_markov(greedyOrdering); // localSearch(greedyOrdering);
+        double RRCost = expected_markov(rrOrdering);
+        
+        std::cout << "Greedy ordering:\n";
+        for (std::size_t i = 0; i < n; ++i) {
+            std::cout << greedyOrdering[i] << ' ';
+        }
+        std::cout << std::endl;
+
+        std::cout << "OPT ordering:\n";
+        for (std::size_t i = 0; i < n; ++i) {
+            std::cout << OPT[i] << ' ';
+        }
+        std::cout << std::endl;
+        std::cout << "RR ordering:\n";
+        for (std::size_t i = 0; i < n; ++i) {
+            std::cout << rrOrdering[i] << ' ';
+        }
+        std::cout << std::endl;
+        std::cout << "RR cost: " << RRCost << std::endl;
+
+        std::cout << "Greedy cost: " << greedyCost << std::endl;
+
+        std::cout << "Greedy / OPT ratio: " << greedyCost / EOPT << std::endl;
+
+        delete[] greedyOrdering;
+    }
+
 private:
     unsigned cost(const unsigned* ordering, const unsigned* realization) const {
         bool* colorsSeen = new bool[d];
@@ -446,7 +575,7 @@ private:
             }
 
             numChecked++;
-            if (0 == numChecked % OPT_DISPLAY) {
+            if (0 == (numChecked & OPT_DISPLAY)) {
                 std::cout << "Checked " << numChecked 
                 << " permutations out of " << totalPermuations << " total. "
                 << std::round(1000.0f * double(numChecked) / double(totalPermuations)) / 10.0f
@@ -605,8 +734,12 @@ private:
 int main() {
     unsigned d = 3;
 
-    for (unsigned n = 12; n <= 12; n++) {
+    for (unsigned n = 10; n <= 12; n++) {
         RepProb repProb(d, n);
+
+        repProb.compareGreedyAndOpt();
+        std::cout << repProb << std::endl;
+        continue;
         
         // Evaluates the representative problem
         auto f = [d, n](const unsigned* outcome){
